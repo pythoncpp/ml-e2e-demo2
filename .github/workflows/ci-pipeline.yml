@@ -139,6 +139,7 @@ jobs:
   # deploy the docker image to docker hub
   deploy:
     runs-on: ubuntu-latest
+    needs: train-model
     steps:
       - uses: actions/checkout@v3
       - name: Download trained model
