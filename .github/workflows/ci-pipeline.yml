@@ -38,4 +38,4 @@ jobs:
       # test the application
       - name: Test with pytest
         run: |
-          pytest tests/test_data.py -v --cov=src --cov-report=xml
+          pytest tests/ -v --cov=src --cov-report=xml
