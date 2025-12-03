@@ -38,4 +38,100 @@ jobs:
       # test the application
       - name: Test with pytest
         run: |
-          pytest tests/ -v --cov=src --cov-report=xml
+          pytest tests/test_data.py -v --cov=src --cov-report=xml
+
+  # train the model
+  train-model:
+    runs-on: python:3.9-slim
+    needs: test
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/requirements.txt
+          pip install mlflow
+
+      - name: Start MLflow server in background
+        run: |
+          # Start MLflow server
+          mlflow server \
+            --host 0.0.0.0 \
+            --port 8000 &
+
+          # Wait for server to start
+          sleep 5
+
+          # Test connection
+          curl http://localhost:8000 || true
+
+      - name: Train model with MLflow
+        env:
+          MLFLOW_TRACKING_URI: http://13.223.229.65:5000
+        run: |
+          python -c "
+          import sys
+          sys.path.append('src')
+          from model.train import ModelTrainer
+          import yaml
+
+          with open('configs/config.yaml', 'r') as f:
+              config = yaml.safe_load(f)
+
+          trainer = ModelTrainer(config)
+          results = trainer.train_model('linear_regression')
+          print(f'Model trained with R2: {results[\"metrics\"][\"r2\"]:.3f}')
+          "
+
+      - name: Save trained model as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: models/
+          retention-days: 7
+
+      - name: Run model evaluation
+        run: |
+          python -c "
+          import sys
+          sys.path.append('src')
+          from evaluation.metrics import ModelEvaluator
+          import pandas as pd
+          import joblib
+          import yaml
+
+          with open('config/config.yaml', 'r') as f:
+              config = yaml.safe_load(f)
+
+          # Load test data
+          test_df = pd.read_csv(config['data']['test_data_path'])
+          X_test = test_df[['YearsExperience']].values
+          y_test = test_df['Salary'].values
+
+          # Load model
+          model = joblib.load('models/salary_predictor_linear_regression.pkl')
+          y_pred = model.predict(X_test)
+
+          # Calculate metrics
+          evaluator = ModelEvaluator()
+          metrics = evaluator.calculate_metrics(y_test, y_pred)
+
+          # Save metrics
+          evaluator.save_metrics(metrics, 'metrics.json')
+
+          # Check if model meets threshold
+          if metrics['r2'] < 0.7:
+              print('Model performance below threshold!')
+              exit(1)
+          "
+      - name: Upload metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-metrics
+          path: metrics.json

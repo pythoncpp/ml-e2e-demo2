@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # used to train the model
 class ModelTrainer:
-    def __init__(self, config: dict, train_data, test_data):
+    def __init__(self, config: dict, train_data = None, test_data = None):
         self.config = config
         self.models = {
             'linear_regression': LinearRegression(),
@@ -32,6 +32,12 @@ class ModelTrainer:
     def load_data(self) -> tuple:
         """Load training data"""
         
+        if self.train_df is None:
+            self.train_df = pd.read_csv(self.config['data']['train_data_path'])
+
+        if self.test_df is None:
+            self.test_df = pd.read_csv(self.config['data']['test_data_path'])
+
         # split the data into X and y
         X_train = self.train_df[['YearsExperience']].values
         y_train = self.train_df['Salary'].values
